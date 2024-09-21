@@ -17,8 +17,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Configuration
-TOKEN = '5930787327:AAFApKXgAdqgf-M7as9EVWyPBCshF3fFbfw'
-CHAT_ID = 608152463
+TOKEN = 'yourTOKEN'
+CHAT_ID = yourID
 BASE_URL = 'http://scp-wiki-cn.wikidot.com/scp-'
 MIN_SCP = 101
 MAX_SCP = 3000
