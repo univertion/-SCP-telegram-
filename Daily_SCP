@@ -1,0 +1,95 @@
+import asyncio
+import logging
+import random
+import os
+from typing import Optional
+
+import aiohttp
+from bs4 import BeautifulSoup
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+
+# Set up logging
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+# Configuration
+TOKEN = '5930787327:AAFApKXgAdqgf-M7as9EVWyPBCshF3fFbfw'
+CHAT_ID = 608152463
+BASE_URL = 'http://scp-wiki-cn.wikidot.com/scp-'
+MIN_SCP = 101
+MAX_SCP = 3000
+MESSAGE_INTERVAL = 86400  # 1 hour in seconds
+
+
+async def fetch_scp_content(session: aiohttp.ClientSession, scp_number: int) -> Optional[str]:
+    """Fetch and parse SCP content from the website."""
+    try:
+        async with session.get(f"{BASE_URL}{scp_number}") as response:
+            if response.status != 200:
+                logger.error(f"Failed to fetch SCP-{scp_number}. Status: {response.status}")
+                return None
+
+            html = await response.text()
+            soup = BeautifulSoup(html, 'html.parser')
+            content = soup.find(id='page-content')
+
+            if not content:
+                logger.error(f"Could not find content for SCP-{scp_number}")
+                return None
+
+            return content.get_text(strip=True)[:4000]  # Limit to 4000 characters
+    except Exception as e:
+        logger.error(f"Error fetching SCP-{scp_number}: {str(e)}")
+        return None
+
+
+async def send_random_scp(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Fetch a random SCP and send it to the specified chat."""
+    scp_number = random.randint(MIN_SCP, MAX_SCP)
+
+    async with aiohttp.ClientSession() as session:
+        content = await fetch_scp_content(session, scp_number)
+
+    if content:
+        try:
+            await context.bot.send_message(chat_id=CHAT_ID, text=f"SCP-{scp_number}:\n\n{content}")
+            logger.info(f"Sent SCP-{scp_number} to chat {CHAT_ID}")
+        except Exception as e:
+            logger.error(f"Failed to send message: {str(e)}")
+    else:
+        logger.warning(f"No content found for SCP-{scp_number}")
+
+
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle the /start command."""
+    await update.message.reply_text("SCP Bot is running. You will receive random SCP entries periodically.")
+
+
+def main() -> None:
+    """Set up and run the bot."""
+    if not TOKEN:
+        logger.error("No bot token provided. Set the TELEGRAM_BOT_TOKEN environment variable.")
+        return
+
+    if CHAT_ID == 0:
+        logger.error("No valid chat ID provided. Set the TELEGRAM_CHAT_ID environment variable.")
+        return
+
+    application = ApplicationBuilder().token(TOKEN).build()
+
+    # Add handlers
+    application.add_handler(CommandHandler("start", start_command))
+
+    # Schedule the job
+    application.job_queue.run_repeating(send_random_scp, interval=MESSAGE_INTERVAL, first=10)
+
+    # Start the bot
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
+
+
+if __name__ == '__main__':
+    main()
